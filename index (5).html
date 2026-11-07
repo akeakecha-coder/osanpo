@@ -1,0 +1,914 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>おまかせ散歩</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<style>
+  /* Layout: one column. The buddy talks in a speech bubble and every screen asks one thing.
+     Places are chosen on a full-height map screen; the course result is a short card. */
+  :root {
+    --bg: #f1f5f2;
+    --surface: #ffffff;
+    --fg: #17261f;
+    --muted: #55655d;
+    --line: #d2dcd5;
+    --accent: #167a52;
+    --accent-fg: #ffffff;
+    --accent-soft: #dcefe4;
+    --warn: #b4452a;
+    --body: #f2bf55;
+    --body-deep: #d9982f;
+    --belly: #fbe3a6;
+    --cheek: #f08f7e;
+    --eye: #2a2118;
+    --shadow: rgba(23, 38, 31, 0.14);
+    --font-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
+    --font-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1713;
+      --surface: #16231d;
+      --fg: #e3eee8;
+      --muted: #93a59b;
+      --line: #2a3b33;
+      --accent: #4fd197;
+      --accent-fg: #08150f;
+      --accent-soft: #1b3a2d;
+      --warn: #ff9a7a;
+      --body: #e8b64d;
+      --body-deep: #c98a28;
+      --belly: #f1d28e;
+      --cheek: #e98a7a;
+      --eye: #2a2118;
+      --shadow: rgba(0, 0, 0, 0.4);
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.7;
+    display: flex;
+    flex-direction: column;
+  }
+  body.picking { height: 100%; overflow: hidden; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; }
+  p { margin: 0; }
+  h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.3; font-size: 1.3rem; }
+
+  .pad {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding-top: max(14px, env(safe-area-inset-top, 0px));
+    padding-bottom: 6px;
+  }
+  .kicker { font-family: var(--font-display); font-size: 0.95rem; letter-spacing: 0.1em; color: var(--accent); font-weight: 700; }
+  .linkbtn { background: none; border: 0; padding: 6px 2px; color: var(--accent); font-weight: 700; font-size: 0.9rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .link { color: var(--accent); font-weight: 700; }
+
+  #stageWrap { padding-top: 12px; padding-bottom: 48px; }
+  #stage { max-width: 34rem; display: flex; flex-direction: column; gap: 20px; }
+
+  /* buddy + bubble */
+  .buddy { display: flex; align-items: flex-end; gap: 14px; }
+  .creature { flex: none; width: 7.2rem; }
+  .creature.mini { width: 4.4rem; }
+  .creature svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .bubble { position: relative; flex: 1 1 0; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin-bottom: 18px; }
+  .bubble::before { content: ""; position: absolute; left: -7px; bottom: 20px; width: 12px; height: 12px; background: var(--surface); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+  .bubble p { white-space: pre-line; font-weight: 500; font-size: 1.02rem; overflow-wrap: anywhere; }
+
+  /* choices */
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 10px; }
+  .opts.one { grid-template-columns: 1fr; }
+  .opt { text-align: left; padding: 14px 16px; border: 2px solid var(--line); border-radius: 14px; background: var(--surface); cursor: pointer; line-height: 1.4; }
+  .opt strong { display: block; font-family: var(--font-display); font-size: 1.05rem; }
+  .opt small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+  .opt:hover { border-color: var(--accent); }
+  .opt:active { background: var(--accent-soft); }
+  .opt:focus-visible, .btn:focus-visible, .linkbtn:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .field { display: flex; flex-direction: column; gap: 10px; }
+  input[type="text"] { width: 100%; font: inherit; color: var(--fg); background: var(--surface); border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+  input[type="text"]::placeholder { color: var(--muted); opacity: 0.8; }
+  .hint { color: var(--muted); font-size: 0.82rem; }
+
+  .btn { font-family: var(--font-display); font-weight: 700; border-radius: 14px; padding: 13px 16px; border: 2px solid var(--accent); background: var(--accent); color: var(--accent-fg); cursor: pointer; text-align: center; text-decoration: none; display: inline-block; line-height: 1.35; }
+  .btn small { display: block; font-family: var(--font-body); font-weight: 400; font-size: 0.78rem; opacity: 0.9; }
+  .btn.ghost { background: transparent; color: var(--accent); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.big { width: 100%; font-size: 1.1rem; padding: 16px 18px; }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .row .btn { flex: 1 1 9rem; }
+
+  .dots { display: flex; gap: 6px; align-items: center; }
+  .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); display: block; }
+  .dots i.on { background: var(--accent); }
+  .navrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+  .msg { color: var(--muted); font-size: 0.9rem; }
+  .msg.err { color: var(--warn); }
+  .fine { color: var(--muted); font-size: 0.8rem; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .meta { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  .steps { margin: 0; padding-left: 1.3rem; display: flex; flex-direction: column; gap: 6px; }
+
+  /* growth */
+  .meter { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+  .stats { display: flex; gap: 20px; flex-wrap: wrap; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
+  .stats b { color: var(--fg); font-family: var(--font-display); font-size: 1.15rem; margin-right: 2px; }
+  .gain { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+  .gifts { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.4rem, 1fr)); gap: 10px; }
+  .gift { border: 1px solid var(--line); border-radius: 12px; padding: 12px 10px; background: var(--surface); text-align: center; font-size: 0.88rem; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+  .gift.no { border-style: dashed; color: var(--muted); }
+  .gift b { display: block; font-family: var(--font-display); font-size: 0.75rem; color: var(--accent); }
+
+  /* route line */
+  ol.line { list-style: none; margin: 0; padding: 0; }
+  ol.line li { position: relative; padding: 0 0 18px 2.2rem; min-width: 0; }
+  ol.line li:last-child { padding-bottom: 0; }
+  ol.line li::before { content: ""; position: absolute; left: calc(0.6rem - 1.5px); top: 1.1rem; bottom: -0.2rem; width: 3px; background: var(--accent); border-radius: 2px; }
+  ol.line li:last-child::before { display: none; }
+  ol.line li::after { content: ""; position: absolute; left: 0; top: 0.32rem; width: 1.2rem; height: 1.2rem; border-radius: 50%; background: var(--accent); border: 3px solid var(--accent); }
+  .stop-name { font-weight: 700; overflow-wrap: anywhere; }
+  .badge { font-size: 0.72rem; font-weight: 700; color: var(--accent); margin-right: 8px; letter-spacing: 0.06em; }
+
+  .toplinks { display: flex; gap: 14px; flex-wrap: wrap; }
+  .gift svg { display: block; width: 100%; height: auto; overflow: visible; margin-bottom: 4px; }
+  .gift .nm { display: block; font-weight: 700; }
+  .gift .sub { display: block; color: var(--muted); font-size: 0.75rem; }
+  .gift.now { border-color: var(--accent); }
+
+  /* map picker */
+  #pickView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #pickTop { display: flex; align-items: flex-end; gap: 10px; padding-top: 2px; padding-bottom: 4px; }
+  #pickTop .bubble { margin-bottom: 10px; padding: 10px 14px; }
+  #pickTop .bubble p { font-size: 0.95rem; }
+  #bar { display: flex; gap: 8px; padding-bottom: 8px; }
+  #bar input { flex: 1; }
+  #bar .btn { padding: 10px 14px; }
+  #map { flex: 1; min-height: 0; width: 100%; background: var(--line); }
+  #pickSheet { background: var(--surface); border-top: 1px solid var(--line); padding-top: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; max-height: 44%; overflow-y: auto; }
+  #pickSheet h2 { font-size: 1.05rem; overflow-wrap: anywhere; }
+  .coord { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .creature svg { animation: bob 3.2s ease-in-out infinite; transform-origin: 50% 100%; }
+    .creature.happy svg { animation: hop 0.7s ease-in-out 3; }
+    .meter i { transition: width 0.6s ease; }
+    .opt, .btn { transition: background-color 0.15s, border-color 0.15s; }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+    @keyframes hop { 0%, 100% { transform: translateY(0) scale(1, 1); } 40% { transform: translateY(-14px) scale(0.97, 1.04); } 70% { transform: translateY(0) scale(1.05, 0.95); } }
+  }
+</style>
+</head>
+<body>
+
+<div class="top pad">
+  <div class="kicker">おまかせ散歩</div>
+  <div class="toplinks">
+    <button type="button" class="linkbtn" id="bookBtn">ずかん</button>
+    <button type="button" class="linkbtn" id="boxBtn">おみやげ箱</button>
+  </div>
+</div>
+
+<div id="stageWrap" class="pad">
+  <section id="stage" aria-live="polite"></section>
+</div>
+
+<section id="pickView" hidden>
+  <div id="pickTop" class="pad">
+    <div class="creature mini" id="pickCreature"></div>
+    <div class="bubble"><p id="pickQ"></p></div>
+  </div>
+  <form id="bar" class="pad">
+    <input type="text" id="q" placeholder="駅・お店・公園をさがす" autocomplete="off" enterkeyhint="search">
+    <button type="submit" class="btn" id="searchBtn">さがす</button>
+  </form>
+  <div id="map" role="application" aria-label="地図"></div>
+  <div id="pickSheet" class="pad">
+    <div id="pickEmpty">
+      <h2>地図をタップして場所をえらぶ</h2>
+      <p class="msg">お店やスポットのマークをタップすると、名前も入るよ。</p>
+    </div>
+    <div id="picked" hidden>
+      <h2 id="pName"></h2>
+      <p class="msg" id="pAddr"></p>
+      <p class="coord" id="pCoord"></p>
+    </div>
+    <div class="row">
+      <button type="button" class="btn" id="pickOk" disabled>ここにする</button>
+      <button type="button" class="btn ghost" id="locate">いまいる場所</button>
+    </div>
+    <p class="msg" id="pickMsg" role="status" aria-live="polite"></p>
+    <div id="pickNav"></div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = "osanpo:v3";
+  var KEY_STORE = "osanpo:mapkey";
+  var SPEED = { slow: 3.5, mid: 4.5, fast: 5.5 };
+  var PACE = { slow: "ぶらぶら", mid: "てくてく", fast: "すたすた" };
+  var CIRC = 1.3; // on foot, roads wind: a straight-line distance becomes about 1.3x
+  var STAGES = [
+    { n: "たまご", min: 0 },
+    { n: "ちびっこ", min: 15 },
+    { n: "わんぱく", min: 90 },
+    { n: "どっしり", min: 240 },
+    { n: "ゆうゆう", min: 480 }
+  ];
+  var GIFTS = ["どんぐり", "もみじの葉", "いちょうの葉", "まつぼっくり", "ふしぎな形の石", "道ばたのねこ", "夕やけの色", "すんだ青空", "川のきらきら", "パンのいい匂い", "四つ葉のクローバー", "名前も知らない花"];
+
+  var GRAD = 600; // after this many minutes with one buddy, it leaves the nest and a new egg is left behind
+  var VARIANTS = [
+    null, // the original yellow buddy
+    { body: "#f4a6a0", deep: "#d9807a", belly: "#fbd3cf", cheek: "#e86f6f", leaf: "#2f9e6b", flower: "#f6d04d" },
+    { body: "#8cc7e8", deep: "#5fa3c9", belly: "#cfe9f6", cheek: "#f08f7e", leaf: "#3d9a6a", flower: "#f6d04d" },
+    { body: "#c3a9e8", deep: "#9a7fcf", belly: "#e4d8f6", cheek: "#ef8fae", leaf: "#4a9a6e", flower: "#f6d04d" },
+    { body: "#a8d98a", deep: "#7bb85a", belly: "#d9f0c8", cheek: "#f0968a", leaf: "#d1792f", flower: "#e8c547" },
+    { body: "#f1ece1", deep: "#cfc5b0", belly: "#fff9ec", cheek: "#f09aa0", leaf: "#3a8f64", flower: "#e98a9a" }
+  ];
+
+  /* ---------- saved data (this browser only) ---------- */
+  function blank() { return { name: "", totalMin: 0, buddyMin: 0, variant: 0, book: [], walks: 0, lastTs: 0, gifts: {}, form: null }; }
+  function validSpot(s) { return s && typeof s === "object" && typeof s.name === "string" && isFinite(s.lat) && isFinite(s.lng); }
+  function load() {
+    try {
+      var o = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (o && typeof o === "object") {
+        var b = blank();
+        b.name = typeof o.name === "string" ? o.name : "";
+        b.totalMin = +o.totalMin || 0;
+        b.buddyMin = typeof o.buddyMin === "number" ? o.buddyMin : b.totalMin;
+        b.variant = (+o.variant || 0) % VARIANTS.length;
+        b.book = Array.isArray(o.book) ? o.book.filter(function (x) { return x && typeof x.name === "string"; }).slice(-200) : [];
+        b.walks = +o.walks || 0;
+        b.lastTs = +o.lastTs || 0;
+        b.gifts = o.gifts && typeof o.gifts === "object" ? o.gifts : {};
+        var f = o.form;
+        if (f && validSpot(f.start)) b.form = { mode: f.mode === "dest" && validSpot(f.dest) ? "dest" : "loop", start: f.start, dest: validSpot(f.dest) ? f.dest : null, min: +f.min || 30, pace: PACE[f.pace] ? f.pace : "mid" };
+        return b;
+      }
+    } catch (e) {}
+    return blank();
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} }
+  var P = load();
+  function getKey() { try { return localStorage.getItem(KEY_STORE) || ""; } catch (e) { return ""; } }
+  function setKey(k) { try { localStorage.setItem(KEY_STORE, k); } catch (e) {} }
+  function clearKey() { try { localStorage.removeItem(KEY_STORE); } catch (e) {} }
+
+  var S = { mode: "loop", start: null, dest: null, min: 30, pace: "mid", steps: [], i: 0, plan: null, credited: false };
+
+  /* ---------- small helpers ---------- */
+  function h(tag, cls, text) {
+    var el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    return el;
+  }
+  function btn(cls, label, sub, fn) {
+    var b = h("button", cls);
+    b.type = "button";
+    b.appendChild(document.createTextNode(label));
+    if (sub) b.appendChild(h("small", null, sub));
+    b.addEventListener("click", fn);
+    return b;
+  }
+  function leavePicker() {
+    $("pickView").hidden = true;
+    $("stageWrap").hidden = false;
+    document.body.classList.remove("picking");
+  }
+  function show(nodes) {
+    leavePicker();
+    var st = $("stage");
+    st.textContent = "";
+    nodes.forEach(function (n) { st.appendChild(n); });
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+  function curStage() { return stageOf(P.buddyMin); }
+  function stageOf(m) { var s = 0; for (var i = 0; i < STAGES.length; i++) { if (m >= STAGES[i].min) s = i; } return s; }
+  function nm() { return P.name || "あいぼう"; }
+  function kmOf(min, pace) { return (min / 60) * SPEED[pace]; }
+  function ll(p) { return p.lat.toFixed(6) + "," + p.lng.toFixed(6); }
+
+  /* ---------- the buddy ---------- */
+  function leaf(bx, by, a, len) {
+    var rad = a * Math.PI / 180;
+    var cx = bx + Math.sin(rad) * len, cy = by - Math.cos(rad) * len;
+    return '<ellipse cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" rx="' + (len * 0.45).toFixed(1) + '" ry="' + len.toFixed(1) +
+      '" transform="rotate(' + a + " " + cx.toFixed(1) + " " + cy.toFixed(1) + ')" fill="var(--leaf, var(--accent))"/>';
+  }
+  function variantStyle(v) {
+    var o = VARIANTS[v % VARIANTS.length];
+    if (!o) return "";
+    return ' style="--body:' + o.body + ";--body-deep:" + o.deep + ";--belly:" + o.belly + ";--cheek:" + o.cheek + ";--leaf:" + o.leaf + ";--flower:" + o.flower + '"';
+  }
+  function creatureSVG(stage, mood, variant) {
+    var head = '<svg viewBox="0 -14 120 134" role="img" aria-label="' + STAGES[stage].n + '"' + variantStyle(variant || 0) + '>';
+    var ground = '<ellipse cx="60" cy="112" rx="' + (stage === 0 ? 28 : 22 + stage * 5) + '" ry="4.5" fill="var(--shadow)"/>';
+    if (stage === 0) {
+      return head + ground +
+        '<path d="M60 20 C84 20 98 58 98 80 C98 100 82 110 60 110 C38 110 22 100 22 80 C22 58 36 20 60 20 Z" fill="var(--body)"/>' +
+        '<circle cx="46" cy="48" r="4" fill="var(--body-deep)"/><circle cx="74" cy="60" r="5" fill="var(--body-deep)"/><circle cx="52" cy="92" r="4.5" fill="var(--body-deep)"/><circle cx="78" cy="88" r="3.5" fill="var(--body-deep)"/>' +
+        '<path d="M44 76 q5 5 10 0 M66 76 q5 5 10 0" stroke="var(--eye)" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+        '</svg>';
+    }
+    var RX = [0, 26, 32, 38, 42], RY = [0, 24, 29, 34, 38];
+    var rx = RX[stage], ry = RY[stage], cy = 108 - ry, top = cy - ry;
+    var ex = rx * 0.36, ey = cy - ry * 0.12, er = 3.2 + stage * 0.35, my = cy + ry * 0.18;
+    var out = head + ground;
+    var ll2 = 8 + stage * 1.6, by = top + 3;
+    if (stage === 1) out += leaf(60, by, 20, ll2);
+    if (stage === 2) out += leaf(60, by, -28, ll2) + leaf(60, by, 28, ll2);
+    if (stage >= 3) out += leaf(60, by, -42, ll2) + leaf(60, by, 42, ll2) + leaf(60, by, 0, ll2 + 3);
+    if (stage === 4) {
+      var fy = by - ll2 * 2 - 9, petals = "";
+      for (var k = 0; k < 5; k++) {
+        var ang = k * 72 * Math.PI / 180;
+        petals += '<circle cx="' + (60 + Math.sin(ang) * 6).toFixed(1) + '" cy="' + (fy - Math.cos(ang) * 6).toFixed(1) + '" r="4.2" fill="var(--cheek)"/>';
+      }
+      out += petals + '<circle cx="60" cy="' + fy.toFixed(1) + '" r="3.6" fill="var(--flower, #f6d04d)"/>';
+    }
+    out += '<ellipse cx="60" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '" fill="var(--body)"/>';
+    out += '<ellipse cx="60" cy="' + (cy + ry * 0.28).toFixed(1) + '" rx="' + (rx * 0.6).toFixed(1) + '" ry="' + (ry * 0.5).toFixed(1) + '" fill="var(--belly)" opacity="0.7"/>';
+    out += '<ellipse cx="' + (60 - rx * 0.42).toFixed(1) + '" cy="108" rx="9" ry="5" fill="var(--body-deep)"/><ellipse cx="' + (60 + rx * 0.42).toFixed(1) + '" cy="108" rx="9" ry="5" fill="var(--body-deep)"/>';
+    out += '<circle cx="' + (60 - ex).toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="' + er.toFixed(1) + '" fill="var(--eye)"/><circle cx="' + (60 + ex).toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="' + er.toFixed(1) + '" fill="var(--eye)"/>';
+    out += '<circle cx="' + (60 - ex + 1.1).toFixed(1) + '" cy="' + (ey - 1.1).toFixed(1) + '" r="1.1" fill="#fff"/><circle cx="' + (60 + ex + 1.1).toFixed(1) + '" cy="' + (ey - 1.1).toFixed(1) + '" r="1.1" fill="#fff"/>';
+    out += '<ellipse cx="' + (60 - rx * 0.62).toFixed(1) + '" cy="' + (ey + 8).toFixed(1) + '" rx="5" ry="3" fill="var(--cheek)" opacity="0.75"/><ellipse cx="' + (60 + rx * 0.62).toFixed(1) + '" cy="' + (ey + 8).toFixed(1) + '" rx="5" ry="3" fill="var(--cheek)" opacity="0.75"/>';
+    if (mood === "happy") out += '<path d="M52 ' + my.toFixed(1) + ' q8 11 16 0 z" fill="#7a3b2e"/>';
+    else out += '<path d="M53 ' + my.toFixed(1) + ' q7 6 14 0" stroke="var(--eye)" stroke-width="2.4" fill="none" stroke-linecap="round"/>';
+    return out + "</svg>";
+  }
+  function buddy(stage, mood, text, variant) {
+    var wrap = h("div", "buddy");
+    var c = h("div", "creature" + (mood === "happy" ? " happy" : ""));
+    c.innerHTML = creatureSVG(stage, mood, variant == null ? P.variant : variant); // built only from constants above
+    var b = h("div", "bubble");
+    b.appendChild(h("p", null, (stage === 0 ? "（ことこと…）\n" : "") + text));
+    wrap.appendChild(c);
+    wrap.appendChild(b);
+    return wrap;
+  }
+  function greet() {
+    var hr = new Date().getHours();
+    var gap = P.lastTs ? Math.floor((Date.now() - P.lastTs) / 86400000) : 0;
+    if (P.buddyMin === 0 && P.book.length) return "新しいたまごだよ。いっしょに、おさんぽにいこう。";
+    if (P.walks === 0) return "はじめまして。いっしょに、おさんぽにいこうよ。";
+    if (gap >= 4) return "ひさしぶり！ 会いたかったよ。ちょっとだけ、歩かない？";
+    if (hr >= 5 && hr < 10) return "おはよう！ 朝の空気、きもちいいよ。おさんぽ、いかない？";
+    if (hr >= 10 && hr < 16) return "ねえ、ちょっと外にでてみない？ おさんぽ、いこうよ。";
+    if (hr >= 16 && hr < 19) return "夕方のおさんぽ、きもちいいよ。いかない？";
+    return "夜風にあたりにいこうか。ほんの少しだけ。";
+  }
+
+  function growthCard(stage) {
+    var card = h("div", "card");
+    var cur = STAGES[stage], next = STAGES[stage + 1];
+    var goal = next ? next.min : GRAD;
+    card.appendChild(h("h2", null, nm() + "は「" + cur.n + "」"));
+    var meter = h("div", "meter");
+    var fill = h("i");
+    fill.style.width = Math.max(0, Math.min(100, Math.round(((P.buddyMin - cur.min) / (goal - cur.min)) * 100))) + "%";
+    meter.appendChild(fill);
+    card.appendChild(meter);
+    var left = Math.max(0, goal - P.buddyMin);
+    card.appendChild(h("p", "meta", next ? "あと" + left + "分歩くと「" + next.n + "」になるよ" : "もう立派になったよ。あと" + left + "分歩くと、ひとりだちの日だよ。"));
+    var stats = h("div", "stats");
+    var a = h("span"); a.appendChild(h("b", null, String(P.totalMin))); a.appendChild(document.createTextNode("分 歩いた"));
+    var b = h("span"); b.appendChild(h("b", null, String(P.walks))); b.appendChild(document.createTextNode("回 おさんぽ"));
+    stats.appendChild(a); stats.appendChild(b);
+    card.appendChild(stats);
+    return card;
+  }
+
+  /* ---------- screens ---------- */
+  function naming() {
+    var field = h("form", "field");
+    var input = h("input");
+    input.type = "text"; input.id = "nameIn"; input.maxLength = 12; input.placeholder = "例: まめ、ぽて";
+    input.setAttribute("autocomplete", "off");
+    field.appendChild(input);
+    field.appendChild(h("span", "hint", "あとから変えることもできます。"));
+    var go = h("button", "btn big", "この名前にする"); go.type = "submit";
+    field.appendChild(go);
+    field.appendChild(btn("linkbtn", "あとで決める", null, function () { P.name = "あいぼう"; save(); home(); }));
+    field.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      P.name = input.value.trim().slice(0, 12) || "あいぼう";
+      save();
+      home();
+    });
+    var prev = P.book.length ? P.book[P.book.length - 1].name : "";
+    show([buddy(0, "idle", prev ? "旅立った" + prev + "の、たまごがひとつ残ってたよ。\nなまえを、つけてくれる？" : "たまごの中から、声がする。\nなまえを、つけてくれる？"), field]);
+    input.focus();
+  }
+
+  function home() {
+    if (!P.name) { naming(); return; }
+    var st = curStage();
+    var nodes = [buddy(st, "idle", greet())];
+    var box = h("div", "stack");
+    var f = P.form;
+    if (f) {
+      var summary = (f.mode === "dest" ? f.start.name + "から" + f.dest.name + "へ" : f.start.name + "から") + "・" + f.min + "分・" + PACE[f.pace];
+      box.appendChild(btn("btn big", "いつものさんぽにでかける", summary, function () {
+        S.mode = f.mode; S.start = f.start; S.dest = f.dest; S.min = f.min; S.pace = f.pace;
+        makeCourse();
+      }));
+      box.appendChild(btn("btn ghost big", "ほかのさんぽをえらぶ", null, startWizard));
+    } else {
+      box.appendChild(btn("btn big", "さんぽにでかける", null, startWizard));
+    }
+    nodes.push(box);
+    nodes.push(growthCard(st));
+    show(nodes);
+    syncBox();
+  }
+
+  function startWizard() { S.i = 0; S.steps = ["mode"]; S.plan = null; ask(); }
+  function dotsEl() {
+    var d = h("div", "dots");
+    S.steps.forEach(function (_, idx) { d.appendChild(h("i", idx === S.i ? "on" : "")); });
+    return d;
+  }
+  function navRow() {
+    var row = h("div", "navrow");
+    row.appendChild(btn("linkbtn", "← ひとつ前", null, function () { if (S.i > 0) { S.i--; ask(); } else { home(); } }));
+    row.appendChild(dotsEl());
+    return row;
+  }
+  function choose(opts, onPick, cls) {
+    var g = h("div", "opts" + (cls ? " " + cls : ""));
+    opts.forEach(function (o) {
+      var b = h("button", "opt");
+      b.type = "button";
+      b.appendChild(h("strong", null, o.t));
+      if (o.s) b.appendChild(h("small", null, o.s));
+      b.addEventListener("click", function () { onPick(o.v); });
+      g.appendChild(b);
+    });
+    return g;
+  }
+  function next() {
+    if (S.i < S.steps.length - 1) { S.i++; ask(); } else { makeCourse(); }
+  }
+  function ask() {
+    var k = S.steps[S.i], st = curStage();
+    if (k === "mode") {
+      show([buddy(st, "idle", "どんなさんぽにする？"),
+        choose([{ v: "loop", t: "ぐるっと一周", s: "出かけた場所に、帰ってくる" }, { v: "dest", t: "寄り道して着く", s: "行きたい場所へ、遠回りで" }], function (v) {
+          S.mode = v;
+          S.steps = v === "dest" ? ["mode", "start", "dest", "min", "pace"] : ["mode", "start", "min", "pace"];
+          S.i = 1; ask();
+        }, "one"),
+        navRow()]);
+    } else if (k === "start") {
+      pickStep("start", "どこから出かけようか？\n地図をタップしてね。", "ここから出かける");
+    } else if (k === "dest") {
+      pickStep("dest", "どこに向かう？\n地図をタップしてね。", "ここに向かう");
+    } else if (k === "min") {
+      show([buddy(st, "idle", "どのくらい歩く？"),
+        choose([
+          { v: 15, t: "15分", s: "ちょっと" }, { v: 30, t: "30分", s: "さくっと" }, { v: 45, t: "45分", s: "ほどよく" },
+          { v: 60, t: "1時間", s: "じっくり" }, { v: 90, t: "1時間半", s: "たっぷり" }, { v: 120, t: "2時間", s: "とことん" }
+        ], function (v) { S.min = v; next(); }),
+        navRow()]);
+    } else {
+      show([buddy(st, "idle", "どんな足どりでいく？"),
+        choose([
+          { v: "slow", t: "ぶらぶら", s: "時速3.5km" }, { v: "mid", t: "てくてく", s: "時速4.5km" }, { v: "fast", t: "すたすた", s: "時速5.5km" }
+        ], function (v) { S.pace = v; next(); }),
+        navRow()]);
+    }
+  }
+
+  /* ---------- map (Google Maps demo key, loaded only when a place is picked) ---------- */
+  var STYLE_LIGHT = [
+    { elementType: "geometry", stylers: [{ color: "#e9f0eb" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#3f5248" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#f1f5f2" }] },
+    { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#c4d1c8" }] },
+    { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#dcebe0" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#cde5d3" }] },
+    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#2d6a4a" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#d2dcd5" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#fbf3d9" }] },
+    { featureType: "transit", elementType: "geometry", stylers: [{ color: "#d2dcd5" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#bfdde6" }] },
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4a7a8a" }] }
+  ];
+  var STYLE_DARK = [
+    { elementType: "geometry", stylers: [{ color: "#16231d" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#93a59b" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#0e1713" }] },
+    { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#2a3b33" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1b3a2d" }] },
+    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#4fd197" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#2a3b33" }] },
+    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#16231d" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3a4f44" }] },
+    { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2a3b33" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f2a33" }] },
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#5f8f9e" }] }
+  ];
+  var map = null, marker = null, Place = null, token = 0, mapsP = null, scriptAdded = false;
+  var pickKind = "start", cur = null, located = false;
+
+  function ensureMaps() {
+    if (mapsP) return mapsP;
+    var key = getKey();
+    if (!key) return Promise.reject({ code: "nokey" });
+    mapsP = new Promise(function (resolve, reject) {
+      window.__mapsReady = function () { initMap().then(resolve, function () { reject({ code: "init" }); }); };
+      var s = document.createElement("script");
+      s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&v=weekly&loading=async&callback=__mapsReady";
+      s.async = true;
+      s.onerror = function () { mapsP = null; reject({ code: "load" }); };
+      scriptAdded = true;
+      document.head.appendChild(s);
+    });
+    return mapsP;
+  }
+  window.gm_authFailure = function () {
+    clearKey();
+    mapsP = null;
+    keyView("このキーでは地図をひらけなかったよ。コピーし直して、もういちど貼りつけてね。");
+  };
+
+  async function initMap() {
+    var maps = await google.maps.importLibrary("maps");
+    var places = await google.maps.importLibrary("places");
+    Place = places.Place;
+    var dark = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var accent = (getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#167a52").trim();
+    map = new maps.Map($("map"), {
+      center: { lat: 35.681236, lng: 139.767125 },
+      zoom: 17,
+      styles: dark ? STYLE_DARK : STYLE_LIGHT,
+      backgroundColor: dark ? "#16231d" : "#e9f0eb",
+      gestureHandling: "greedy",
+      clickableIcons: true,
+      fullscreenControl: false,
+      streetViewControl: false,
+      mapTypeControl: false
+    });
+    marker = new google.maps.Marker({
+      map: null,
+      position: map.getCenter(),
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: accent, fillOpacity: 1, strokeColor: dark ? "#16231d" : "#ffffff", strokeWeight: 4 }
+    });
+    map.addListener("click", function (ev) {
+      if (ev.placeId && ev.stop) ev.stop();
+      pickAt(ev.latLng, ev.placeId || null);
+    });
+  }
+
+  function keyView(message) {
+    var st = curStage();
+    var card = h("div", "card");
+    card.appendChild(h("p", null, "地図には、Googleマップの「お試し用キー」を使います。カードの登録はいりません。"));
+    var ol = h("ol", "steps");
+    var li1 = h("li");
+    var a = h("a", "link", "お試し用キーのページ");
+    a.href = "https://developers.google.com/maps/documentation/javascript/demo-key";
+    a.target = "_blank"; a.rel = "noopener noreferrer";
+    li1.appendChild(a); li1.appendChild(document.createTextNode("を開く"));
+    ol.appendChild(li1);
+    ["Googleアカウントでログインして「Get a Demo Key」を押す", "利用規約に同意すると、キー（英数字の長い文字列）が出る", "そのキーをコピーして、下に貼りつける"].forEach(function (t) { ol.appendChild(h("li", null, t)); });
+    card.appendChild(ol);
+    var form = h("form", "field");
+    var input = h("input");
+    input.type = "text"; input.id = "keyIn"; input.placeholder = "キーを貼りつけ";
+    input.setAttribute("autocomplete", "off"); input.setAttribute("autocapitalize", "off"); input.setAttribute("spellcheck", "false");
+    var err = h("p", "msg err", message || "");
+    var go = h("button", "btn big", "キーを保存して地図をひらく"); go.type = "submit";
+    form.appendChild(input); form.appendChild(err); form.appendChild(go);
+    form.appendChild(h("span", "hint", "キーは、この端末のブラウザの中にだけ保存されます。"));
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var k = input.value.trim();
+      if (!k) { err.textContent = "キーを貼りつけてね。"; return; }
+      setKey(k);
+      if (scriptAdded) { location.reload(); return; }
+      ask();
+    });
+    card.appendChild(form);
+    show([buddy(st, "idle", "地図をつかうために、ひと手間だけお願い。\n最初の1回だけだよ。"), card, navRow()]);
+  }
+
+  function pickStep(kind, question, okLabel) {
+    pickKind = kind;
+    ensureMaps().then(function () {
+      showPicker(kind, question, okLabel);
+    }).catch(function (e) {
+      var code = e && e.code;
+      keyView(code === "load" ? "地図を読み込めなかったよ。ネットにつながっているか確認して、もういちど。" : code === "init" ? "地図の準備でつまずいたよ。キーを確かめて、もういちど。" : "");
+    });
+  }
+
+  function showPicker(kind, question, okLabel) {
+    $("stageWrap").hidden = true;
+    $("pickView").hidden = false;
+    document.body.classList.add("picking");
+    $("pickCreature").innerHTML = creatureSVG(curStage(), "idle", P.variant);
+    $("pickQ").textContent = question;
+    $("pickOk").textContent = okLabel;
+    $("pickMsg").textContent = "";
+    $("pickNav").textContent = "";
+    $("pickNav").appendChild(navRow());
+    $("q").value = "";
+    google.maps.event.trigger(map, "resize");
+    var existing = S[kind];
+    if (existing) {
+      setPicked(existing);
+      map.setCenter({ lat: existing.lat, lng: existing.lng });
+      map.setZoom(17);
+    } else {
+      cur = null;
+      $("pickEmpty").hidden = false;
+      $("picked").hidden = true;
+      $("pickOk").disabled = true;
+      marker.setMap(null);
+      if (!located) { located = true; locate(true); }
+    }
+  }
+
+  function setPicked(p) {
+    cur = { name: p.name, address: p.address || "", lat: p.lat, lng: p.lng };
+    $("pickEmpty").hidden = true;
+    $("picked").hidden = false;
+    $("pName").textContent = cur.name;
+    $("pAddr").textContent = cur.address;
+    $("pCoord").textContent = cur.lat.toFixed(5) + ", " + cur.lng.toFixed(5);
+    $("pickOk").disabled = false;
+    marker.setPosition({ lat: cur.lat, lng: cur.lng });
+    marker.setMap(map);
+  }
+
+  async function pickAt(latLng, placeId) {
+    var my = ++token;
+    var lat = latLng.lat(), lng = latLng.lng();
+    $("pickMsg").textContent = "";
+    setPicked({ name: "地図でえらんだ場所", address: "", lat: lat, lng: lng });
+    map.panTo({ lat: lat, lng: lng });
+    if (map.getZoom() < 16) map.setZoom(16);
+    if (placeId && Place) {
+      try {
+        var pl = new Place({ id: placeId });
+        await pl.fetchFields({ fields: ["displayName", "formattedAddress"] });
+        if (my !== token) return;
+        setPicked({ name: pl.displayName || "えらんだ場所", address: pl.formattedAddress || "", lat: lat, lng: lng });
+      } catch (e) { /* the pin and coordinates are enough */ }
+    }
+  }
+
+  $("bar").addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    var q = $("q").value.trim();
+    if (!q || !Place || !map) return;
+    var my = ++token;
+    $("searchBtn").disabled = true;
+    $("pickMsg").className = "msg";
+    $("pickMsg").textContent = "さがしています…";
+    try {
+      var res = await Place.searchByText({ textQuery: q, fields: ["displayName", "formattedAddress", "location"], maxResultCount: 1, locationBias: map.getCenter(), language: "ja" });
+      if (my !== token) return;
+      var r = res && res.places && res.places[0];
+      if (!r || !r.location) { $("pickMsg").className = "msg err"; $("pickMsg").textContent = "見つからなかったよ。町名もいっしょに入れてみてね。"; return; }
+      setPicked({ name: r.displayName || q, address: r.formattedAddress || "", lat: r.location.lat(), lng: r.location.lng() });
+      map.setZoom(17);
+      map.panTo(r.location);
+      $("pickMsg").textContent = "";
+    } catch (e) {
+      $("pickMsg").className = "msg err";
+      $("pickMsg").textContent = "さがせなかったよ。しばらくしてから、もういちど。";
+    } finally {
+      $("searchBtn").disabled = false;
+    }
+  });
+
+  function locate(quiet) {
+    if (!navigator.geolocation || !map) { if (!quiet) { $("pickMsg").className = "msg err"; $("pickMsg").textContent = "この端末では現在地を使えないみたい。"; } return; }
+    if (!quiet) { $("pickMsg").className = "msg"; $("pickMsg").textContent = "いまいる場所をさがしています…"; }
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      var lat = pos.coords.latitude, lng = pos.coords.longitude;
+      if (quiet) { if (!cur) { map.setCenter({ lat: lat, lng: lng }); map.setZoom(17); } return; }
+      token++;
+      setPicked({ name: "いまいる場所", address: "", lat: lat, lng: lng });
+      map.setZoom(17);
+      map.panTo({ lat: lat, lng: lng });
+      $("pickMsg").textContent = "";
+    }, function () {
+      if (!quiet) { $("pickMsg").className = "msg err"; $("pickMsg").textContent = "現在地を取れなかったよ。位置情報の許可を確認してね。"; }
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+  $("locate").addEventListener("click", function () { locate(false); });
+  $("pickOk").addEventListener("click", function () {
+    if (!cur) return;
+    S[pickKind] = { name: cur.name, address: cur.address, lat: cur.lat, lng: cur.lng };
+    next();
+  });
+
+  /* ---------- course (no AI: built from the chosen coordinates) ---------- */
+  function xy(a, b) {
+    return { x: (b.lng - a.lng) * 111.32 * Math.cos(a.lat * Math.PI / 180), y: (b.lat - a.lat) * 110.574 };
+  }
+  function at(a, x, y) {
+    return { lat: a.lat + y / 110.574, lng: a.lng + x / (111.32 * Math.cos(a.lat * Math.PI / 180)) };
+  }
+  function planLoop(St, km) {
+    var n = km < 4 ? 3 : 4, wps = [];
+    var r = (km / CIRC) / ((n + 1) * 2 * Math.sin(Math.PI / (n + 1)));
+    var th = Math.random() * 2 * Math.PI;
+    var cx = r * Math.cos(th), cy = r * Math.sin(th);
+    var phi0 = th + Math.PI, dir = Math.random() < 0.5 ? 1 : -1;
+    for (var i = 1; i <= n; i++) {
+      var phi = phi0 + dir * i * 2 * Math.PI / (n + 1);
+      wps.push(at(St, cx + r * Math.cos(phi), cy + r * Math.sin(phi)));
+    }
+    return { wps: wps, end: St, km: km, note: "" };
+  }
+  function planDest(St, D, km) {
+    var v = xy(St, D), len = Math.sqrt(v.x * v.x + v.y * v.y), T = km / CIRC;
+    if (len < 0.01) return planLoop(St, km);
+    var direct = { wps: [], end: D, km: Math.max(km, len * CIRC), note: "選んだ時間だと、ほぼまっすぐ向かうコースになるよ。" };
+    if (T <= len * 1.15) return direct;
+    var h2 = Math.pow((T - len / 3) / 2, 2) - Math.pow(len / 3, 2);
+    if (h2 <= 0.0025) return direct;
+    var hh = Math.sqrt(h2), side = Math.random() < 0.5 ? 1 : -1;
+    var ux = v.x / len, uy = v.y / len, px = -uy * side, py = ux * side;
+    return {
+      wps: [at(St, ux * len / 3 + px * hh, uy * len / 3 + py * hh), at(St, ux * 2 * len / 3 + px * hh, uy * 2 * len / 3 + py * hh)],
+      end: D, km: km, note: ""
+    };
+  }
+  function routeUrl(St, plan) {
+    var p = new URLSearchParams({ api: "1", origin: ll(St), destination: ll(plan.end), travelmode: "walking" });
+    if (plan.wps.length) p.set("waypoints", plan.wps.map(ll).join("|"));
+    return "https://www.google.com/maps/dir/?" + p.toString();
+  }
+
+  function makeCourse() {
+    var km = kmOf(S.min, S.pace);
+    S.plan = S.mode === "dest" && S.dest ? planDest(S.start, S.dest, km) : planLoop(S.start, km);
+    S.credited = false;
+    P.form = { mode: S.mode === "dest" && S.dest ? "dest" : "loop", start: S.start, dest: S.mode === "dest" ? S.dest : null, min: S.min, pace: S.pace };
+    save();
+    courseView();
+  }
+
+  function courseView() {
+    var st = curStage(), pl = S.plan, dest = S.mode === "dest" && S.dest;
+    var card = h("div", "card");
+    card.appendChild(h("h2", null, dest ? S.start.name + "から" + S.dest.name + "へ寄り道" : S.start.name + "からぐるっと一周"));
+    card.appendChild(h("p", "meta", "約" + S.min + "分・約" + pl.km.toFixed(1) + "km（" + PACE[S.pace] + "）"));
+    if (pl.note) card.appendChild(h("p", "meta", pl.note));
+    var ol = h("ol", "line");
+    var first = h("li"), fn = h("div", "stop-name");
+    fn.appendChild(h("span", "badge", "出発")); fn.appendChild(document.createTextNode(S.start.name));
+    first.appendChild(fn); ol.appendChild(first);
+    var last = h("li"), ln = h("div", "stop-name");
+    ln.appendChild(h("span", "badge", dest ? "到着" : "もどる")); ln.appendChild(document.createTextNode(dest ? S.dest.name : S.start.name));
+    last.appendChild(ln); ol.appendChild(last);
+    card.appendChild(ol);
+    card.appendChild(h("p", "fine", "実際の道と時間は、マップが決めます。海や川の上に当たったら、「別のコース」を押してね。"));
+
+    var act = h("div", "stack");
+    var a = h("a", "btn big", "マップで歩く");
+    a.href = routeUrl(S.start, pl); a.target = "_blank"; a.rel = "noopener noreferrer";
+    act.appendChild(a);
+    act.appendChild(btn("btn ghost big", "歩いたよ！", nm() + "にごほうびをあげる", walked));
+    var row = h("div", "row");
+    row.appendChild(btn("btn ghost", "別のコース", null, makeCourse));
+    row.appendChild(btn("btn ghost", "ホームにもどる", null, home));
+    act.appendChild(row);
+    show([buddy(st, "idle", nm() + "「ここはどう？」"), card, act]);
+  }
+
+  /* ---------- reward ---------- */
+  function walked() {
+    if (S.credited) { home(); return; }
+    S.credited = true;
+    var before = curStage();
+    P.totalMin += S.min;
+    P.buddyMin += S.min;
+    P.walks += 1;
+    P.lastTs = Date.now();
+    var g = Math.floor(Math.random() * GIFTS.length);
+    P.gifts[g] = (P.gifts[g] || 0) + 1;
+    if (P.buddyMin >= GRAD) { graduate(g); return; }
+    save();
+    celebrate(before, curStage(), g);
+  }
+  function graduate(g) {
+    var old = { name: nm(), variant: P.variant };
+    P.book.push({ name: old.name, variant: old.variant, ts: Date.now() });
+    // the next buddy always looks different from the one that just left
+    P.variant = (P.variant + 1 + Math.floor(Math.random() * (VARIANTS.length - 1))) % VARIANTS.length;
+    P.name = "";
+    P.buddyMin = 0;
+    save();
+    var card = h("div", "card");
+    card.appendChild(h("p", "gain", "+" + S.min + "分 歩いた"));
+    var gift = h("p", null);
+    gift.appendChild(document.createTextNode("おみやげ: "));
+    gift.appendChild(h("b", null, GIFTS[g]));
+    card.appendChild(gift);
+    card.appendChild(h("p", "meta", "「ずかん」に、" + old.name + "がのこったよ。"));
+    show([buddy(4, "happy", old.name + "は、たくさん歩いたね。\nひとりだちの日だよ。\nたまごをひとつ、残していくね。", old.variant), card, btn("btn big", "つづきを見る", null, naming)]);
+    syncBox();
+  }
+  function celebrate(before, after, g) {
+    var line;
+    if (before === 0 && after > 0) line = "たまごが、ぱかっ！\n" + nm() + "が生まれたよ！";
+    else if (after > before) line = nm() + "が「" + STAGES[after].n + "」にそだったよ！";
+    else line = "たのしかった！\nまたいこうね。";
+    var card = h("div", "card");
+    card.appendChild(h("p", "gain", "+" + S.min + "分 歩いた"));
+    var gift = h("p", null);
+    gift.appendChild(document.createTextNode("おみやげ: "));
+    gift.appendChild(h("b", null, GIFTS[g]));
+    card.appendChild(gift);
+    show([buddy(after, "happy", line), card, growthCard(after), btn("btn big", "ホームへ", null, home)]);
+    syncBox();
+  }
+
+  function giftBox() {
+    var found = Object.keys(P.gifts).length;
+    var grid = h("div", "gifts");
+    GIFTS.forEach(function (name, idx) {
+      var n = P.gifts[idx] || 0;
+      var el = h("div", "gift" + (n ? "" : " no"));
+      if (n) { el.appendChild(h("b", null, "×" + n)); el.appendChild(document.createTextNode(name)); }
+      else el.textContent = "？？？";
+      grid.appendChild(el);
+    });
+    var card = h("div", "card");
+    card.appendChild(h("h2", null, "おみやげ箱"));
+    card.appendChild(h("p", "meta", found + " / " + GIFTS.length + " 見つけた。歩くたびに、ひとつ持って帰ってくるよ。"));
+    show([card, grid, btn("btn ghost big", "ホームにもどる", null, home)]);
+  }
+  function bookView() {
+    var head = h("div", "card");
+    head.appendChild(h("h2", null, "相棒ずかん"));
+    head.appendChild(h("p", "meta", P.book.length ? P.book.length + "ひき、ひとりだちしたよ。" : "まだ旅立った子はいないよ。「ゆうゆう」になって、もう少し歩くと、ひとりだちするよ。"));
+    var grid = h("div", "gifts");
+    P.book.forEach(function (e) {
+      var c = h("div", "gift");
+      var art = h("div");
+      art.innerHTML = creatureSVG(4, "idle", e.variant || 0);
+      c.appendChild(art);
+      c.appendChild(h("span", "nm", e.name));
+      var d = e.ts ? new Date(e.ts) : null;
+      if (d && !isNaN(d)) c.appendChild(h("span", "sub", d.getFullYear() + "年" + (d.getMonth() + 1) + "月" + d.getDate() + "日 ひとりだち"));
+      grid.appendChild(c);
+    });
+    var now = h("div", "gift now");
+    var nart = h("div");
+    nart.innerHTML = creatureSVG(curStage(), "idle", P.variant);
+    now.appendChild(nart);
+    now.appendChild(h("span", "nm", nm()));
+    now.appendChild(h("span", "sub", "いっしょに歩いてる"));
+    grid.appendChild(now);
+    show([head, grid, btn("btn ghost big", "ホームにもどる", null, home)]);
+  }
+  function syncBox() {
+    $("boxBtn").textContent = "おみやげ箱 " + Object.keys(P.gifts).length + "/" + GIFTS.length;
+    $("bookBtn").textContent = "ずかん " + P.book.length;
+  }
+
+  /* ---------- start ---------- */
+  $("boxBtn").addEventListener("click", giftBox);
+  $("bookBtn").addEventListener("click", bookView);
+  syncBox();
+  home();
+})();
+</script>
+</body>
+</html>
